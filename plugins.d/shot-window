@@ -1,0 +1,10 @@
+id shot-window
+group x11/bhotkeys-screenshot
+label Window screenshot
+chord Alt+Print
+chord Ctrl+Alt+Print xfce gnome mate
+command window-screenshot --feedback
+repeat 0
+greeter 0
+listen 1
+desc Alt+PrintScreen. Save the focused window and show the file name.

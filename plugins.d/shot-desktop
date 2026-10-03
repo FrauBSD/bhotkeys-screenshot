@@ -1,0 +1,10 @@
+id shot-desktop
+group x11/bhotkeys-screenshot
+label Desktop screenshot
+chord Print
+chord Ctrl+Print kde xfce gnome mate
+command desktop-screenshot --feedback
+repeat 0
+greeter 0
+listen 1
+desc Save the desktop and show the file name.

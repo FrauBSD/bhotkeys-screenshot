@@ -1,0 +1,10 @@
+id shot-greeter
+group x11/bhotkeys-screenshot
+label Greeter screenshot
+chord Print
+command greeter-screenshot --feedback
+repeat 0
+greeter 1
+session 0
+listen 1
+desc PrintScreen at the login screen.

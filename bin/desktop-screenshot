@@ -1,0 +1,233 @@
+#!/bin/sh
+############################################################ LICENSE
+#
+# Copyright (c) 2026 Devin Teske <dteske@FreeBSD.org>
+#
+# SPDX-License-Identifier: BSD-2-Clause
+#
+############################################################ IDENT(1)
+#
+# $Title: Grab each lit output to a PNG $
+# $Copyright: 2026 Devin Teske. All rights reserved. $
+# $FrauBSD: bhotkeys-screenshot/bin/desktop-screenshot 2026-10-04 12:02:26 -0700 Devin Teske $
+#
+############################################################ INFORMATION
+#
+# One program for the session and the greeter. Each lit output
+# is grabbed on its own. Files land in ~/screenshot-*.png, or
+# under /tmp when the name is greeter-screenshot or --greeter
+# is set. --feedback names the file through bosd. Quiet with
+# no options.
+#
+############################################################ ENVIRONMENT
+
+DISPLAY=${DISPLAY:-:0}
+export DISPLAY
+export PATH="/usr/local/bin:/usr/bin:/bin:${PATH:-}"
+
+############################################################ GLOBALS
+
+pgm="${0##*/}" # Program basename
+
+############################################################ FUNCTIONS
+
+quietly() { "$@" > /dev/null 2>&1; }
+have() { quietly command -v "$@"; }
+
+usage()
+{
+	local optfmt="\t%-13s %s\n"
+
+	exec >&2
+	printf "Usage: %s [--feedback] [--greeter]\n" "$pgm"
+	printf "Options:\n"
+	printf "$optfmt" "--feedback" "Show the filename through bosd"
+	printf "$optfmt" "--greeter" "Write the files under /tmp"
+	exit 2
+}
+
+# bosd -t rejects whitespace; callers pass the escaped text
+bosd_encode()
+{
+	printf "%s" "$1" | sed -e 's/ /\\x20/g'
+}
+
+bosd_caption()
+{
+	local name="$1"
+	local top= bot=
+
+	[ "$name" ] || return 0
+	have bosd || return 0
+	top=$( bosd_encode Screenshot ) || return 0
+	bot=$( bosd_encode "$name" ) || return 0
+	quietly bosd -F green -t "$top\\x0a$bot" 2 ||
+		: bosd caption failed
+}
+
+# "NAME WxH+X+Y PRIMARY", one connected output per line
+list_output_geoms()
+{
+	xrandr --current 2> /dev/null | awk '
+		/ connected / {
+			name = $1
+			primary = 0
+			geom = ""
+			for (i = 1; i <= NF; i++) {
+				if ($i == "primary")
+					primary = 1
+				if ($i ~ /^[0-9]+x[0-9]+[+-][0-9]+[+-][0-9]+$/)
+					geom = $i
+			}
+			if (geom != "")
+				print name, geom, primary
+		}'
+}
+
+# WxH+X+Y into $size, $x, and $y
+# A leading minus stays on that coordinate
+geom_split()
+{
+	local g="$1"
+	local rest=
+
+	size="${g%%+*}"
+	rest="${g#*+}"
+	x="${rest%%+*}"
+	y="${rest#*+}"
+}
+ 
+#
+# Paeth prediction is most of the wait on a wide desktop. none
+# plus a light zlib level keeps the PNG and finishes the grab.
+#
+grab_frame()
+{
+	local dest="$1" size="$2" src="$3" err="$4"
+
+	have ffmpeg || return 1
+	ffmpeg -y -loglevel error -probesize 32 -analyzeduration 0 \
+		-f x11grab -framerate 30 -draw_mouse 0 \
+		-video_size "$size" -i "$src" -frames:v 1 \
+		-update 1 -pred none -compression_level 1 \
+		"$dest" 2> "$err"
+}
+
+grab_try()
+{
+	local dest="$1" size="$2" x="$3" y="$4"
+	local alt=
+
+	rm -f "$dest"
+	if grab_frame "$dest" "$size" "$grab_dpy+$x,$y" \
+		"$tmpdir/ffmpeg.err" && [ -s "$dest" ]
+	then
+		return 0
+	fi
+	rm -f "$dest"
+	alt=${DISPLAY%:*}
+	[ "$alt" ] || alt=:0
+	grab_frame "$dest" "$size" "$alt+$x,$y" \
+		"$tmpdir/ffmpeg.err" && [ -s "$dest" ]
+}
+
+capture_fail()
+{
+	[ -s "$tmpdir/ffmpeg.err" ] &&
+		echo "$pgm: $( cat "$tmpdir/ffmpeg.err" )" >&2
+	echo "$pgm: capture failed" >&2
+	exit 1
+}
+
+#
+# One file per lit output when more than one is connected.
+# Sets $out to the primary grab.
+#
+grab_each()
+{
+	local list="$1" base="$2"
+	local pick= first= name= geom= pri= dest=
+
+	while read -r name geom pri; do
+		[ "$name" ] && [ "$geom" ] || continue
+		case "$geom" in
+		*+*) : offset follows ;;
+		*)
+			continue
+		esac
+		geom_split "$geom"
+		dest="$base-$name.png"
+		grab_try "$dest" "$size" "$x" "$y" || continue
+		[ "$first" ] || first=$dest
+		[ "$pri" = 1 ] && pick=$dest
+	done < "$list"
+	[ "$pick" ] || pick=$first
+	[ "$pick" ] || return 1
+	out=$pick
+}
+
+############################################################ MAIN
+
+set -e # errexit
+
+greeter=
+case "$pgm" in
+greeter-screenshot) greeter=1 ;;
+esac
+feedback=
+while [ "$#" -gt 0 ]; do
+	case "$1" in
+	--feedback) feedback=1 ;;
+	--greeter) greeter=1 ;;
+	*) usage # NOTREACHED
+	esac
+	shift # $1
+done
+
+tmp="${TMPDIR:-/tmp}"
+tmpdir=$( mktemp -d "$tmp/desktop-screenshot.XXXXXX" ) || exit 1
+trap 'rm -rf "$tmpdir"' EXIT INT TERM
+
+if [ "$greeter" ]; then
+	shotdir=/tmp
+else
+	shotdir=$HOME
+fi
+out="$shotdir/screenshot-$( date +%Y.%m.%d-%H.%M.%S ).png"
+geom=$( xdpyinfo 2> /dev/null | awk '/dimensions:/ { print $2; exit }' )
+[ "$geom" ] || geom=1920x1200
+case "$DISPLAY" in
+*:*.*) grab_dpy="$DISPLAY" ;;
+*) grab_dpy="$DISPLAY.0"
+esac
+
+list_output_geoms > "$tmpdir/outputs.txt" || : no xrandr
+n=$( wc -l < "$tmpdir/outputs.txt" | tr -d ' ' )
+[ "$n" ] || n=0
+base="${out%.png}"
+if [ "$n" -gt 1 ]; then
+	grab_each "$tmpdir/outputs.txt" "$base" || capture_fail
+else
+	size=$geom
+	x=0
+	y=0
+	if [ "$n" -eq 1 ]; then
+		read -r oname ogeom opri < "$tmpdir/outputs.txt" ||
+			: one output
+		case "$ogeom" in
+		*+*) geom_split "$ogeom" ;;
+		esac
+	fi
+	grab_try "$out" "$size" "$x" "$y" || capture_fail
+fi
+
+# Root at the greeter would otherwise leave the files unreadable
+if [ "$greeter" ]; then
+	quietly chmod 644 "$base.png" "$base"-*.png || : mode
+fi
+quietly ln -sf "$out" "$shotdir/screenshot-latest.png" || : latest link
+[ "$feedback" ] && bosd_caption "${out##*/}"
+
+################################################################################
+# END
+################################################################################

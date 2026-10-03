@@ -1,0 +1,110 @@
+#!/bin/sh
+############################################################ LICENSE
+#
+# Copyright (c) 2026 Devin Teske <dteske@FreeBSD.org>
+#
+# SPDX-License-Identifier: BSD-2-Clause
+#
+############################################################ IDENT(1)
+#
+# $Title: Grab the focused window to a PNG $
+# $Copyright: 2026 Devin Teske. All rights reserved. $
+# $FrauBSD: bhotkeys-screenshot/bin/window-screenshot 2026-10-04 12:02:26 -0700 Devin Teske $
+#
+############################################################ INFORMATION
+#
+# Capture the focused window, or a window id from the command
+# line. --feedback shows the saved file name through bosd, the
+# same green caption as desktop-screenshot.
+#
+############################################################ ENVIRONMENT
+
+DISPLAY=${DISPLAY:-:0}
+export DISPLAY
+export PATH="/usr/local/bin:/usr/bin:/bin:${PATH:-}"
+
+############################################################ GLOBALS
+
+pgm="${0##*/}" # Program basename
+
+############################################################ FUNCTIONS
+
+quietly() { "$@" > /dev/null 2>&1; }
+have() { quietly command -v "$@"; }
+
+usage()
+{
+	local optfmt="\t%-13s %s\n"
+
+	exec >&2
+	printf "Usage: %s [--feedback] [window-id]\n" "$pgm"
+	printf "Options:\n"
+	printf "$optfmt" "--feedback" "Show the filename through bosd"
+	exit 2
+}
+
+# bosd -t rejects whitespace; callers pass the escaped text
+bosd_encode()
+{
+	printf "%s" "$1" | sed -e 's/ /\\x20/g'
+}
+
+bosd_caption()
+{
+	local name="$1" top= bot=
+
+	[ "$name" ] || return 0
+	have bosd || return 0
+	top=$( bosd_encode Screenshot ) || return 0
+	bot=$( bosd_encode "$name" ) || return 0
+	quietly bosd -F green -t "$top\\x0a$bot" 2 ||
+		: bosd caption failed
+}
+
+active_window()
+{
+	have xdotool && xdotool getactivewindow 2> /dev/null && return 0
+	xprop -root _NET_ACTIVE_WINDOW 2> /dev/null |
+		awk '/#/ { print $NF; exit }'
+}
+
+############################################################ MAIN
+
+set -e # errexit
+
+feedback=
+wid=
+while [ "$#" -gt 0 ]; do
+	case "$1" in
+	--feedback) feedback=1 ;;
+	-h|--help) usage ;; # NOTREACHED
+	'') : ok ;;
+	*)
+		[ ! "$wid" ] || usage
+		wid=$1
+	esac
+	shift # $1
+done
+
+[ "$wid" ] || wid=$( active_window ) || : no active window
+if [ ! "$wid" ] || [ "$wid" = "0x0" ] || [ "$wid" = "0" ]; then
+	echo "$pgm: no active window" >&2
+	exit 1
+fi
+
+# Normalize a decimal id from xdotool to hex for gm
+case "$wid" in
+0x*|0X*) : ok ;;
+*) wid=$( printf '0x%x' "$wid" )
+esac
+
+out=$HOME/screenshot-$( date +%Y.%m.%d-%H.%M.%S ).png
+gm import -window "$wid" -silent "$out"
+quietly ln -sf "$out" "$HOME/screenshot-latest.png" ||
+	: latest link
+[ "$feedback" ] && bosd_caption "${out##*/}"
+printf "%s\n" "$out"
+
+################################################################################
+# END
+################################################################################
