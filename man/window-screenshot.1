@@ -1,0 +1,63 @@
+.\" Copyright (c) 2026 Devin Teske <dteske@FreeBSD.org>
+.\"
+.\" SPDX-License-Identifier: BSD-2-Clause
+.\"
+.Dd October 4, 2026
+.Dt WINDOW-SCREENSHOT 1
+.Os
+.Sh NAME
+.Nm window-screenshot
+.Nd grab the focused window to a PNG
+.Sh SYNOPSIS
+.Nm
+.Op Fl Fl feedback
+.Op Ar window-id
+.Sh DESCRIPTION
+.Nm
+grabs one window with
+.Xr gm 1
+.Cm import
+and writes a PNG.
+.Ar window-id
+is an X id, decimal or hex.
+When it is omitted, the focused window is used.
+.Pp
+The file is
+.Pa ~/screenshot- Ns Ar YYYY.MM.DD-HH.MM.SS Ns Pa .png .
+.Pa ~/screenshot-latest.png
+is a symbolic link to it.
+The path is printed.
+.Pp
+.Fl Fl feedback
+shows the file name through
+.Xr bosd 1 ,
+the same green caption as
+.Xr desktop-screenshot 1 .
+.Sh ENVIRONMENT
+.Bl -tag -width "DISPLAY"
+.It Ev DISPLAY
+X server.
+The default is
+.Pa :0 .
+.It Ev HOME
+Directory of the grab.
+.El
+.Sh FILES
+.Bl -tag -width "~/screenshot-YYYY.MM.DD-HH.MM.SS.png"
+.It Pa ~/screenshot-YYYY.MM.DD-HH.MM.SS.png
+The grab.
+.It Pa ~/screenshot-latest.png
+Link to the newest grab.
+.El
+.Sh EXIT STATUS
+.Nm
+exits 0 when the PNG is written.
+It exits 1 when no window can be found or the grab fails.
+A bad argument exits 2.
+.Sh SEE ALSO
+.Xr bhotkeys 1 ,
+.Xr bosd 1 ,
+.Xr desktop-screenshot 1 ,
+.Xr gm 1
+.Sh AUTHORS
+.An Devin Teske Aq Mt dteske@FreeBSD.org

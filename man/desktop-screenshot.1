@@ -1,0 +1,84 @@
+.\" Copyright (c) 2026 Devin Teske <dteske@FreeBSD.org>
+.\"
+.\" SPDX-License-Identifier: BSD-2-Clause
+.\"
+.Dd October 4, 2026
+.Dt DESKTOP-SCREENSHOT 1
+.Os
+.Sh NAME
+.Nm desktop-screenshot ,
+.Nm greeter-screenshot
+.Nd grab each monitor to a PNG
+.Sh SYNOPSIS
+.Nm
+.Op Fl Fl feedback
+.Op Fl Fl greeter
+.Nm greeter-screenshot
+.Op Fl Fl feedback
+.Sh DESCRIPTION
+.Nm
+grabs each connected monitor with
+.Xr ffmpeg 1
+.Cm x11grab
+and writes a PNG.
+One connected monitor produces one file.
+More than one produces one file per monitor, named with the monitor
+after the timestamp.
+The pointer is not drawn.
+.Pp
+One monitor writes
+.Pa ~/screenshot- Ns Ar YYYY.MM.DD-HH.MM.SS Ns Pa .png .
+More than one writes
+.Pa ~/screenshot- Ns Ar YYYY.MM.DD-HH.MM.SS Ns Pa - Ns Ar monitor Ns Pa .png ,
+the monitor name after the timestamp.
+.Pa ~/screenshot-latest.png
+is a symbolic link to the newest grab.
+The name
+.Nm greeter-screenshot ,
+or
+.Fl Fl greeter ,
+writes the same names under
+.Pa /tmp
+and makes them mode 0644.
+.Pp
+With no options the grab is quiet.
+.Fl Fl feedback
+shows the file name through
+.Xr bosd 1 ,
+a green caption.
+.Sh ENVIRONMENT
+.Bl -tag -width "DISPLAY"
+.It Ev DISPLAY
+X server.
+The default is
+.Pa :0 .
+.It Ev HOME
+Directory of a session grab.
+.El
+.Sh FILES
+.Bl -tag -width "~/screenshot-YYYY.MM.DD-HH.MM.SS.png"
+.It Pa ~/screenshot-YYYY.MM.DD-HH.MM.SS.png
+Session grab.
+One file when a single monitor is connected.
+.It Pa ~/screenshot-YYYY.MM.DD-HH.MM.SS- Ns Ar monitor Ns Pa .png
+One file per monitor when more than one is connected.
+.It Pa ~/screenshot-latest.png
+Link to the newest session grab.
+.It Pa /tmp/screenshot-YYYY.MM.DD-HH.MM.SS.png
+Greeter grab.
+.It Pa /tmp/screenshot-latest.png
+Link to the newest greeter grab.
+.El
+.Sh EXIT STATUS
+.Nm
+exits 0 when the PNG is written.
+It exits 1 when the grab fails.
+A bad argument exits 2.
+.Sh SEE ALSO
+.Xr bhotkeys 1 ,
+.Xr bosd 1 ,
+.Xr ffmpeg 1 ,
+.Xr window-screenshot 1 ,
+.Xr xrandr 1
+.Sh AUTHORS
+.An Devin Teske Aq Mt dteske@FreeBSD.org
